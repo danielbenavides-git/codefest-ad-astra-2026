@@ -1,0 +1,31 @@
+{
+  "consultas": [
+    {"id": "", "texto": ""},
+    {"id": "", "texto": ""},
+    {"id": "", "texto": ""}
+  ],
+
+  "textos": [
+    {
+      "id": "",
+      "idioma": "",
+      "fuente": "",
+      "responde_a": [],
+      "texto": ""
+    },
+    {
+      "id": "",
+      "idioma": "",
+      "fuente": "",
+      "responde_a": [],
+      "texto": ""
+    },
+    {
+      "id": "",
+      "idioma": "",
+      "fuente": "",
+      "responde_a": [],
+      "texto": ""
+    }
+  ]
+}
