@@ -1,0 +1,4 @@
+config,MRR,acierto@1,margen,sesgo_idioma
+e5 con prefijos,1.0,3/3,0.0022,0.0411
+e5 sin prefijos,1.0,3/3,0.0021,0.0324
+e5 prefijos al revés,1.0,3/3,-0.0042,0.033
