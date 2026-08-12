@@ -13,4 +13,5 @@ lxml
 pytesseract
 pillow
 osmium
-easyocr 
+easyocr
+pytest
