@@ -9,7 +9,7 @@
     "3": "responde la consulta de forma directa y completa",
     "2": "responde parcialmente: acierta el mecanismo o el lugar, no ambos",
     "1": "relacionado con el tema pero no responde",
-    "0": "no relevante (se omite del campo relevance)"
+    "0": "no relevante"
   },
 
   "texts": [
