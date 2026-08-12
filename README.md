@@ -50,6 +50,9 @@ El corpus cubre tres fenómenos—inteligencia artificial en el sector defensa, 
 │   ├── retrieval.py        ← Fase 6
 │   ├── fusion.py           ← combina rankings de varios encoders (§8.4)
 │   ├── aggregation.py      ← agrega fragmentos al nivel de documento (§8.6)
+│   ├── output.py           ← traduce los nombres internos (español) a los de
+│   │                          resultados.jsonl (inglés, Tabla 2 §9.3.2); único
+│   │                          sitio donde ocurre esa traducción
 │   ├── evaluation.py       ← Fase 7
 │   └── knowledge_graph.py  ← Fase bonus, grafo de conocimiento
 ├── scripts/
