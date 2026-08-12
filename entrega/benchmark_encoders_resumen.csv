@@ -1,0 +1,4 @@
+modelo,MRR,acierto@1,margen,sesgo_idioma,ms_por_fragmento,fragmentos_por_seg,horas_corpus_completo,puntaje_min,puntaje_max,desviacion,margen_normalizado,arquitectura,dim,max_seq_length,techo_arquitectura,params_M,prefijos
+granite-311m,1.0,3/3,0.0075,0.0108,2861.7,0.3,23.85,0.711,0.908,0.0587,0.13,ModernBertModel,768,32768,32768,312,no
+granite-97m,1.0,3/3,0.0172,0.0279,555.0,1.8,4.63,0.664,0.877,0.0531,0.32,ModernBertModel,384,32768,32768,97,no
+e5-base,1.0,3/3,0.0022,0.0411,586.2,1.7,4.88,0.687,0.867,0.0444,0.05,XLMRobertaModel,768,512,514,278,sí
