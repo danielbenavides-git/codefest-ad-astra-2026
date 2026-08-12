@@ -18,11 +18,18 @@ def validar_entradas(
     Cada fila de embeddings debe corresponder exactamente al chunk
     ubicado en la misma posición de la lista `chunks`.
 
+    Siempre devuelve una copia: usa `np.array(..., copy=True)`, nunca
+    `np.asarray`, para no modificar el arreglo que pasó quien llama. Con
+    `np.asarray`, si `embeddings` ya era float32 y contiguo (lo típico de
+    `sentence-transformers`), no se copiaba y `construir_indice` terminaba
+    normalizando en el sitio el arreglo original del caller sin avisar.
+
     Retorna:
-        np.ndarray: matriz 2D, float32 y contigua en memoria.
+        np.ndarray: matriz 2D, float32 y contigua en memoria, independiente
+        del arreglo de entrada.
     """
 
-    vectores = np.asarray(embeddings, dtype=np.float32)
+    vectores = np.array(embeddings, dtype=np.float32, copy=True)
 
     if vectores.ndim != 2:
         raise ValueError(
@@ -56,6 +63,9 @@ def validar_entradas(
 
     return np.ascontiguousarray(vectores, dtype=np.float32)
 
+_TOLERANCIA_NORMA = 1e-3
+
+
 def construir_indice(
     embeddings: np.ndarray,
     chunks: Sequence[Chunk],
@@ -63,11 +73,32 @@ def construir_indice(
     """
     Construye un índice FAISS usando similitud coseno.
 
+    Requiere que `embeddings` llegue ya normalizado a norma unitaria por
+    fila. La normalización es responsabilidad de la Fase 4 (encoding.py,
+    gobernada por `config.NORMALIZAR`), no de esta función (D5): si
+    `retrieval.py` normaliza el vector de consulta con la misma regla,
+    tiene que ser la regla de un solo sitio, y `encoding.py` es ese sitio
+    porque `indexing.py` no interviene en la consulta. Por eso aquí solo
+    se VERIFICA la norma y se falla con ValueError si no es ~1 — no se
+    corrige en silencio, para no ocultar un bug real de la Fase 4.
     """
 
     vectores = validar_entradas(embeddings, chunks)
 
-    faiss.normalize_L2(vectores)
+    normas = np.linalg.norm(vectores, axis=1)
+    desviacion = np.abs(normas - 1.0)
+    fuera_de_tolerancia = desviacion > _TOLERANCIA_NORMA
+    if np.any(fuera_de_tolerancia):
+        peor = int(np.argmax(desviacion))
+        raise ValueError(
+            "Los embeddings deben llegar normalizados a norma unitaria "
+            "(L2 = 1) desde la Fase 4; indexing.py ya no normaliza (D5). "
+            f"Revisa que `config.NORMALIZAR` esté en True y que encoding.py "
+            f"lo respete. {int(fuera_de_tolerancia.sum())} de {len(normas)} "
+            f"vector(es) fuera de tolerancia (±{_TOLERANCIA_NORMA}); peor "
+            f"caso: fila {peor}, norma {normas[peor]:.6f}, "
+            f"chunk_id {chunks[peor].chunk_id!r}."
+        )
 
     dimension = vectores.shape[1]
 
