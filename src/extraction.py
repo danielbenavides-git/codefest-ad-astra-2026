@@ -4,7 +4,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from chunking import DocumentoSinTexto, contar_palabras, detectar_idioma
+from src.chunking import DocumentoSinTexto, contar_palabras, detectar_idioma
 
 # Umbrales
 MIN_PALABRAS_DOC = 15

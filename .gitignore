@@ -11,6 +11,7 @@ data/processed/*
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/
 .ipynb_checkpoints/
 .DS_Store
 entrega/base_vectorial/

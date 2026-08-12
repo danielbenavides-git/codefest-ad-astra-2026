@@ -39,14 +39,19 @@ El corpus cubre tres fenómenos—inteligencia artificial en el sector defensa, 
 
 ├── README.md
 ├── requirements.txt
+├── pyproject.toml
 ├── src/
-│   ├── extraction/        ← Fase 1
-│   ├── limpieza.py        ← Fase 2
-│   ├── chunking.py        ← Fase 3
-│   ├── encoders.py        ← Fase 4
-│   ├── indexado.py        ← Fase 5
-│   ├── recuperacion.py    ← Fase 6
-│   └── evaluacion.py      ← Fase 7
+│   ├── config.py           ← parámetros compartidos (encoder, dimensión, normalización)
+│   ├── extraction.py       ← Fase 1
+│   ├── cleaning.py         ← Fase 2
+│   ├── chunking.py         ← Fase 3
+│   ├── encoding.py         ← Fase 4
+│   ├── indexing.py         ← Fase 5
+│   ├── retrieval.py        ← Fase 6
+│   ├── fusion.py           ← combina rankings de varios encoders (§8.4)
+│   ├── aggregation.py      ← agrega fragmentos al nivel de documento (§8.6)
+│   ├── evaluation.py       ← Fase 7
+│   └── knowledge_graph.py  ← Fase bonus, grafo de conocimiento
 ├── scripts/
 ├── data/
 │   ├── raw/
@@ -54,3 +59,13 @@ El corpus cubre tres fenómenos—inteligencia artificial en el sector defensa, 
 │   └── processed/
 ├── notebooks/
 └── tests/
+
+## Instalación
+
+El paquete `src/` se instala en modo editable, para que `from src.<módulo> import ...`
+funcione igual desde notebooks, tests, scripts o cualquier directorio de trabajo:
+
+```bash
+pip install -r requirements.txt
+pip install -e .
+```

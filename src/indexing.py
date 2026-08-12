@@ -5,7 +5,7 @@ from pathlib import Path
 import faiss
 import numpy as np
 
-from .chunking import Chunk
+from src.chunking import Chunk
 
 
 def validar_entradas(
