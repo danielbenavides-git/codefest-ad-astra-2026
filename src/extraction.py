@@ -543,27 +543,91 @@ EXTRACTORES: dict[str, Callable[[Path], str]] = {
     "pdf": extraer_pdf,
     "html": extraer_html,
     "csv": extraer_csv,
+    "xlsx": extraer_xlsx,
+    "json": extraer_json,
+    "imagen": extraer_imagen,
+    "pbf": extraer_pbf,
+    "texto_plano": extraer_texto_plano,
 }
- 
+
 TITULADORES: dict[str, Callable[[Path], "str | None"]] = {
     "pdf": titulo_pdf,
     "html": titulo_html,
+    "json": titulo_json,
 }
- 
- 
-def extraer(path: Path | str, formato: str) -> str:
-    """Punto de entrada único. `formato` viene del manifiesto."""
+
+
+# No existe un manifiesto que declare el formato de cada archivo del corpus
+# (la palabra no aparece en la spec, y ningún módulo lo produce): se deduce
+# de la extensión. Cada clave del diccionario es una extensión posible, en
+# minúsculas y sin punto; el valor es la clave canónica de EXTRACTORES.
+# Cubre las 7 categorías que la spec (§1.3) dice que entrega ADL —pdf, html,
+# json, csv, xlsx, imágenes, pbf— más .md/.txt (texto_plano), previsto en la
+# guía de extracción de la spec (§2.1) aunque ADL no lo liste como insumo hoy.
+_EXTENSIONES_FORMATO: dict[str, str] = {
+    "pdf": "pdf",
+    "html": "html",
+    "htm": "html",
+    "csv": "csv",
+    "xlsx": "xlsx",
+    "xls": "xlsx",
+    "json": "json",
+    "png": "imagen",
+    "jpg": "imagen",
+    "jpeg": "imagen",
+    "tif": "imagen",
+    "tiff": "imagen",
+    "pbf": "pbf",
+    "md": "texto_plano",
+    "txt": "texto_plano",
+}
+
+
+def formato_desde_extension(path: Path | str) -> str:
+    """Deduce la clave canónica de `EXTRACTORES` a partir de la extensión.
+
+    Insensible a mayúsculas/minúsculas y al punto inicial (`Path.suffix` ya
+    lo incluye, se recorta). Absorbe las variantes más comunes bajo una sola
+    clave: jpg/jpeg y tif/tiff -> "imagen", xls/xlsx -> "xlsx",
+    htm/html -> "html".
+    """
+    ext = Path(path).suffix.lower().lstrip(".")
+    formato = _EXTENSIONES_FORMATO.get(ext)
+    if formato is None:
+        raise DocumentoSinTexto(
+            f"{Path(path).name}: extensión {ext!r} sin formato asociado. "
+            f"Reconocidas: {sorted(_EXTENSIONES_FORMATO)}"
+        )
+    return formato
+
+
+def extraer(path: Path | str, formato: str | None = None) -> str:
+    """Punto de entrada único.
+
+    `formato` es opcional: si no se pasa, se deduce de la extensión de
+    `path` con `formato_desde_extension` (no depender de un manifiesto que
+    no existe). Si se pasa explícitamente, se usa tal cual, sin volver a
+    mirar la extensión.
+    """
     path = Path(path)
+    if formato is None:
+        formato = formato_desde_extension(path)
     extractor = EXTRACTORES.get(formato)
     if extractor is None:
         raise DocumentoSinTexto(
             f"{path.name}: formato {formato!r} sin extractor. Disponibles: {sorted(EXTRACTORES)}"
         )
     return extractor(path)
- 
- 
-def titulo(path: Path | str, formato: str) -> str | None:
-    """Título del documento si el formato lo expone. Alimenta `texto_embed`."""
+
+
+def titulo(path: Path | str, formato: str | None = None) -> str | None:
+    """Título del documento si el formato lo expone. Alimenta `texto_embed`.
+
+    `formato` opcional, misma deducción por extensión que `extraer`.
+    """
+    path = Path(path)
+    if formato is None:
+        formato = formato_desde_extension(path)
     titulador = TITULADORES.get(formato)
-    return titulador(Path(path)) if titulador else None
+    return titulador(path) if titulador else None
  
