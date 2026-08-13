@@ -1,4 +1,4 @@
-"""Fase 7 — Evaluación.
+"""Fase 7 - Evaluación.
 
 Implementa las dos métricas del reto (NDCG@10 para fragmentos, F1@3 para
 documentos, spec §10.2) y el validador de esquema de `resultados.jsonl`

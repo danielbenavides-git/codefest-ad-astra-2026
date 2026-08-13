@@ -4,7 +4,7 @@
 
 ## Equipo
 
-| Nombre | Código |
+| Nombre | Correo |
 |---|---|
 | Daniel Benavides | d.benavidess@uniandes.edu.co |
 | Samuel Rozen | s.rozen@uniandes.edu.co |
@@ -49,7 +49,6 @@ El corpus cubre tres fenómenos—inteligencia artificial en el sector defensa, 
 │   ├── encoding.py
 │   ├── indexing.py
 │   ├── retrieval.py
-│   ├── fusion.py
 │   ├── aggregation.py
 │   ├── output.py
 │   ├── evaluation.py
