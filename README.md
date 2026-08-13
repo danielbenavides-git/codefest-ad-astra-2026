@@ -1,4 +1,4 @@
-# CODEFEST Ad Astra 2026 — Etapa 1
+# CODEFEST Ad Astra 2026 - Etapa 1
 
 **Reto:** Construcción de la Base de Conocimiento | **Organizan:** Universidad de los Andes · Fuerza Aeroespacial Colombiana | **EQUIPO:** Talon Systems
 
@@ -37,6 +37,7 @@ El corpus cubre tres fenómenos—inteligencia artificial en el sector defensa, 
 
 ## Estructura del repositorio
 
+```text
 ├── README.md
 ├── requirements.txt
 ├── pyproject.toml
@@ -60,6 +61,7 @@ El corpus cubre tres fenómenos—inteligencia artificial en el sector defensa, 
 │   └── processed/
 ├── notebooks/
 └── tests/
+```
 
 ## Instalación
 
