@@ -1,47 +1,177 @@
 """Fase de salida — arma `resultados.jsonl` con el esquema exacto de la spec.
 
-Responsabilidad (D4): este es el **único** módulo donde los resultados
-internos de la recuperación, con nombres de campo en español, se traducen
-a los nombres en inglés que exige la spec para la entrega. Ni
-`retrieval.py` ni ningún otro módulo deben hacer esta traducción — si
-aparece en dos sitios, va a haber una entrega con nombres a medias en
-español y a medias en inglés sin que nadie lo note hasta que falle
-`evaluacion.validar_resultados`.
+Este es el único módulo donde los nombres internos en español se traducen a
+los nombres en inglés que exige la entrega (Tabla 2, §9.3.2). Si esa
+traducción apareciera en dos sitios, la entrega saldría a medias en cada
+idioma y nadie lo notaría hasta que fallara `evaluation.validar_resultados`.
 
-Recibe: la salida ya resuelta de la Fase 6 (`retrieval.py`) para una
-consulta — típicamente algo como una lista de hasta 3 `doc_id` ya
-ordenados por relevancia agregada (§8.6) y una lista de hasta 10 objetos
-de fragmento ya recortados a 250 palabras (§9.2.1), cada uno con los
-campos en español que trae `Chunk.to_dict()` (más el `rank` que le asigna
-la propia recuperación, que no viene de ningún chunk).
+Solo cambia un nombre de campo: `texto` -> `text`. `chunk_id` y `doc_id` se
+llaman igual en los dos lados. `fuente`, `formato`, `fenomeno`, `posicion` y
+`num_tokens` son campos de `metadata.jsonl` y no aparecen en la entrega.
 
-Devuelve/escribe: un objeto JSON por consulta con el esquema de la Tabla 2
-(§9.3.2), y el archivo completo con las 50 líneas de `resultados.jsonl`
-(§9.3, §10.3) — nunca toca `metadata.jsonl`.
-
-Correspondencia de nombres, sacada de la spec (no de suposiciones):
-
-| Interno (Tabla 1, §3.4 — `Chunk.to_dict()` / `metadata.jsonl`, español) | Entrega (Tabla 2, §9.3.2 — `resultados.jsonl`, inglés)                              |
-|---------------------------------------------------------------------------|---------------------------------------------------------------------------------------|
-| — (no es un campo de metadata; lo asigna la consulta)                     | `query_id`: identificador de la consulta, `q001`–`q050`                              |
-| — (lista de `doc_id`, ordenada por §8.6, no es un campo de metadata)      | `documents`: array de exactamente 3 objetos, orden de mayor a menor relevancia        |
-| — (posición en esa lista, la asigna la recuperación, no un chunk)         | `documents[i].rank`: entero, posición en el ranking (1, 2, 3)                        |
-| `doc_id`                                                                   | `documents[i].doc_id` — **mismo nombre, sin traducir**                                |
-| — (lista de fragmentos recuperados, ordenada, no es un campo de metadata) | `fragments`: array de exactamente 10 objetos, orden de mayor a menor relevancia       |
-| — (posición en esa lista, la asigna la recuperación)                      | `fragments[i].rank`: entero, posición en el ranking (1 a 10)                          |
-| `chunk_id`                                                                 | `fragments[i].chunk_id` — **mismo nombre, sin traducir**                              |
-| `doc_id`                                                                   | `fragments[i].doc_id` — **mismo nombre, sin traducir**                                |
-| `texto`                                                                    | `fragments[i].text` — **el único campo que cambia de nombre: `texto` → `text`**       |
-
-`fuente`, `formato`, `fenomeno`, `posicion`, `num_tokens` de la Tabla 1
-son campos de `metadata.jsonl` (la base vectorial) y no aparecen en el
-esquema de `resultados.jsonl` (Tabla 2) — no hay que traducirlos porque
-no van en el archivo de entrega, solo en la base.
-
-`metadata.jsonl` (Tabla 1, §3.4) sí usa nombres en español (`texto`
-incluido) y lo escribe directamente `indexing.guardar_base` — ese archivo
-no pasa por este módulo.
-
-No hay lógica implementada todavía: este archivo es solo el contrato,
-pendiente de que exista `retrieval.py` para tener algo real que traducir.
+Este módulo es la última puerta antes de escribir el archivo, así que es
+estricto: exige 3 documentos, 10 fragmentos y textos de máximo 250 palabras
+(§9.3.2). Prefiere fallar acá, donde el error se puede corregir, que
+entregar un archivo que la evaluación automática descarta.
 """
+
+import json
+import re
+from collections.abc import Sequence
+from pathlib import Path
+
+from src.chunking import LIMITE_DURO, contar_palabras
+
+N_CONSULTAS = 50
+N_DOCUMENTOS = 3
+N_FRAGMENTOS = 10
+
+_QUERY_ID = re.compile(r"^q0(?:0[1-9]|[1-4]\d|50)$")
+
+
+def _validar_query_id(query_id: str) -> str:
+    if not isinstance(query_id, str) or not _QUERY_ID.match(query_id):
+        raise ValueError(
+            f"query_id inválido: {query_id!r}. Debe ir de 'q001' a 'q050' "
+            f"(§10.1)."
+        )
+    return query_id
+
+
+def armar_documentos(documentos: Sequence[dict]) -> list[dict]:
+    """Salida de `aggregation.agregar_documentos` -> array `documents`.
+
+    El `rank` se reasigna acá según la posición en la lista, no se copia del
+    diccionario de entrada: así el archivo entregado siempre tiene rangos
+    1, 2, 3 consecutivos, que es lo que valida la organización.
+    """
+    if len(documentos) != N_DOCUMENTOS:
+        raise ValueError(
+            f"Se recibieron {len(documentos)} documentos y la entrega exige "
+            f"exactamente {N_DOCUMENTOS} (§9.3.2). Si son menos, la búsqueda "
+            f"no trajo fragmentos de suficientes documentos distintos: sube "
+            f"la k de retrieval."
+        )
+
+    salida = []
+    for posicion, documento in enumerate(documentos, start=1):
+        doc_id = documento.get("doc_id")
+        if not doc_id:
+            raise ValueError(f"El documento en la posición {posicion} no tiene doc_id.")
+        salida.append({"rank": posicion, "doc_id": str(doc_id)})
+
+    return salida
+
+
+def armar_fragmentos(fragmentos: Sequence[dict]) -> list[dict]:
+    """Salida de `retrieval.buscar_vector` -> array `fragments`.
+
+    Recibe los fragmentos ya ordenados y ya recortados a los 10 primeros.
+    Este módulo no ordena ni recorta la lista: solo traduce y verifica.
+    """
+    if len(fragmentos) != N_FRAGMENTOS:
+        raise ValueError(
+            f"Se recibieron {len(fragmentos)} fragmentos y la entrega exige "
+            f"exactamente {N_FRAGMENTOS} (§9.3.2)."
+        )
+
+    salida = []
+    for posicion, fragmento in enumerate(fragmentos, start=1):
+        chunk_id = fragmento.get("chunk_id")
+        doc_id = fragmento.get("doc_id")
+        texto = fragmento.get("texto")
+
+        if not chunk_id:
+            raise ValueError(f"El fragmento {posicion} no tiene chunk_id.")
+        if not doc_id:
+            raise ValueError(f"El fragmento {posicion} no tiene doc_id.")
+        if not isinstance(texto, str) or not texto.strip():
+            raise ValueError(
+                f"El fragmento {posicion} (chunk_id {chunk_id!r}) no tiene "
+                f"campo 'texto'. Viene de metadata.jsonl, donde el campo se "
+                f"llama así; acá se traduce a 'text'."
+            )
+
+        palabras = contar_palabras(texto)
+        if palabras > LIMITE_DURO:
+            raise ValueError(
+                f"El fragmento {posicion} (chunk_id {chunk_id!r}) tiene "
+                f"{palabras} palabras y el máximo es {LIMITE_DURO} (§9.2). "
+                f"chunking.py ya garantiza ese límite, así que esto indica "
+                f"que el texto se modificó después de fragmentar."
+            )
+
+        salida.append(
+            {
+                "rank": posicion,
+                "chunk_id": str(chunk_id),
+                "doc_id": str(doc_id),
+                "text": texto,
+            }
+        )
+
+    return salida
+
+
+def armar_linea(
+    query_id: str,
+    documentos: Sequence[dict],
+    fragmentos: Sequence[dict],
+) -> dict:
+    """Una consulta -> el objeto JSON de una línea de `resultados.jsonl`."""
+    return {
+        "query_id": _validar_query_id(query_id),
+        "documents": armar_documentos(documentos),
+        "fragments": armar_fragmentos(fragmentos),
+    }
+
+
+def escribir_resultados(
+    lineas: Sequence[dict],
+    path: str | Path,
+    *,
+    validar: bool = True,
+) -> Path:
+    """Escribe `resultados.jsonl`: 50 líneas, en orden q001 a q050 (§10.3).
+
+    Con `validar=True` vuelve a leer el archivo escrito y lo pasa por
+    `evaluation.validar_resultados`, que es el mismo esquema que revisa la
+    organización. Comprobar el archivo en disco y no la lista en memoria es
+    a propósito: así también se detecta un problema de codificación o de
+    saltos de línea al escribir.
+    """
+    if len(lineas) != N_CONSULTAS:
+        raise ValueError(
+            f"Se recibieron {len(lineas)} consultas y la entrega exige "
+            f"exactamente {N_CONSULTAS} (§10.3)."
+        )
+
+    esperados = [f"q{i:03d}" for i in range(1, N_CONSULTAS + 1)]
+    recibidos = [linea.get("query_id") for linea in lineas]
+
+    if recibidos != esperados:
+        primera = next(
+            (i for i, (r, e) in enumerate(zip(recibidos, esperados)) if r != e),
+            0,
+        )
+        raise ValueError(
+            f"Las líneas deben ir en orden q001 a q050 (§10.3). La primera "
+            f"discrepancia está en la posición {primera + 1}: "
+            f"{recibidos[primera]!r} en vez de {esperados[primera]!r}."
+        )
+
+    destino = Path(path)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+
+    with destino.open("w", encoding="utf-8") as archivo:
+        for linea in lineas:
+            archivo.write(json.dumps(linea, ensure_ascii=False) + "\n")
+
+    if validar:
+        from src.evaluation import validar_resultados
+
+        informe = validar_resultados(destino)
+        if not informe.valido:
+            raise ValueError(f"El archivo escrito no cumple el esquema.\n{informe}")
+
+    return destino
