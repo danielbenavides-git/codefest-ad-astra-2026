@@ -1,17 +1,32 @@
-sentence-transformers
-transformers
-torch
-faiss-cpu
-pysbd
-numpy
-pandas
-jupyter
-py3langid
-pymupdf
-beautifulsoup4
-lxml
-pytesseract
-pillow
-osmium
-easyocr
-pytest
+# requirements.txt - CODEFEST Ad Astra 2026
+# Solo dependencias directas. Las transitivas las resuelve pip.
+# Python 3.12. Todo corre en CPU: no instalar builds de CUDA.
+
+# --- Encoder y modelos (Fase 4) ---
+sentence-transformers==5.7.0
+transformers==5.15.0      # >=4.48 obligatorio: ModernBERT no existe antes
+torch==2.13.0             # backend de inferencia
+huggingface-hub==1.27.0   # descarga de modelos
+
+# --- Indice vectorial (Fase 5) ---
+faiss-cpu==1.15.0         # IndexFlatIP
+numpy==2.5.2
+
+# --- Fragmentacion (Fase 3) ---
+pysbd==0.3.4              # segmentacion en oraciones
+py3langid==0.3.0          # deteccion de idioma
+
+# --- Extraccion por formato (Fase 1) ---
+pymupdf==1.28.2           # PDF
+beautifulsoup4==4.15.0    # HTML
+lxml==6.1.1               # parser de bs4; html.parser queda de respaldo
+pandas==3.0.5             # CSV
+openpyxl==3.1.5           # XLSX
+osmium==4.3.1             # PBF
+pillow==12.3.0            # imagenes
+pytesseract==0.3.13       # OCR de paginas PDF escaneadas
+easyocr==1.7.2            # OCR de imagenes sueltas; arrastra opencv
+
+# --- Desarrollo ---
+pytest==9.1.1
+jupyter==1.1.1
