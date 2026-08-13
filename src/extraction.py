@@ -4,7 +4,13 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from chunking import DocumentoSinTexto, contar_palabras, detectar_idioma
+from src.chunking import DocumentoSinTexto, contar_palabras, detectar_idioma
+from src.cleaning import (
+    InformeLimpieza,
+    bloques_por_pagina,
+    quitar_numeros_sueltos,
+    quitar_repetidos,
+)
 
 # Umbrales
 MIN_PALABRAS_DOC = 15
@@ -70,59 +76,91 @@ def _ocr_imagen(datos: bytes, idioma: str | None) -> str:
     return pytesseract.image_to_string(img, lang=PACK_TESSERACT.get(idioma or "", "spa+por+eng"))
 
 
-def extraer_pdf(path: Path, ocr: bool = True) -> str:
+def extraer_pdf(
+    path: Path, ocr: bool = True, devolver_informe: bool = False
+) -> "str | tuple[str, InformeLimpieza]":
     """Texto de un PDF, con OCR solo en las páginas que no tienen capa de texto.
- 
+
     `get_text("blocks", sort=True)` ordena por posición y respeta el doble
     columnado; la extracción lineal mezcla las dos columnas línea a línea y
     produce frases sin sentido.
- 
+
     El OCR es por página, no por documento: un PDF mixto (texto + páginas
     escaneadas) se recupera entero y solo se paga OCR donde hace falta.
+
+    La limpieza de cabeceras y pies repetidos (Fase 2, `cleaning.quitar_repetidos`)
+    ocurre aquí mismo, sobre los bloques con coordenadas que ya produce
+    `get_text("blocks", ...)` vía `cleaning.bloques_por_pagina` — no hay que
+    reabrir el PDF ni perder la posición de cada bloque para aplicarla. Las
+    páginas que vinieron de OCR no tienen coordenadas fiables (el texto es una
+    sola cadena plana), así que a esas solo se les aplica
+    `cleaning.quitar_numeros_sueltos`.
+
+    Si `devolver_informe` es True, devuelve `(texto, informe)` con el
+    `InformeLimpieza` de `quitar_repetidos` (qué se borró y por qué, incluida
+    la nota si el tope de seguridad del 25% impidió tocar el documento) —
+    útil para depurar caso por caso. Por defecto se descarta, para no romper
+    el contrato `Callable[[Path], str]` que espera `EXTRACTORES`.
     """
     import fitz
- 
+
     try:
         doc = fitz.open(path)
     except Exception as exc:
         raise DocumentoSinTexto(f"{path.name}: no se pudo abrir como PDF ({exc})") from exc
- 
-    paginas: list[str] = []
+
+    paginas_bloques = bloques_por_pagina(doc)
+
     sin_capa: list[int] = []
-    for n, pagina in enumerate(doc):
-        bloques = pagina.get_text("blocks", sort=True)
-        plano = "\n".join(b[4] for b in bloques if isinstance(b[4], str))
+    for n, bloques_pagina in enumerate(paginas_bloques):
+        plano = "\n".join(t for t, _ in bloques_pagina)
         if contar_palabras(plano) < MIN_PALABRAS_PAGINA:
             sin_capa.append(n)
-            paginas.append("")
-        else:
-            paginas.append(plano)
- 
+
+    texto_ocr: dict[int, str] = {}
     if sin_capa and ocr:
         # El idioma se detecta sobre las páginas que sí tienen texto. Si no hay
         # ninguna (PDF escaneado entero), se OCRea con el pack combinado, se
         # detecta sobre ese texto sucio y se vuelve a OCRear con el correcto.
-        limpio = " ".join(p for p in paginas if p)
+        limpio = " ".join(
+            t
+            for n, bloques_pagina in enumerate(paginas_bloques)
+            if n not in sin_capa
+            for t, _ in bloques_pagina
+        )
         idioma = detectar_idioma(limpio) if contar_palabras(limpio) >= 15 else None
- 
+
         if idioma is None:
             sucio = _ocr_imagen(doc[sin_capa[0]].get_pixmap(dpi=DPI_OCR).tobytes("png"), None)
             if contar_palabras(sucio) >= 15:
                 idioma = detectar_idioma(sucio)
- 
+
         for n in sin_capa:
-            paginas[n] = _ocr_imagen(doc[n].get_pixmap(dpi=DPI_OCR).tobytes("png"), idioma)
- 
+            texto_ocr[n] = _ocr_imagen(doc[n].get_pixmap(dpi=DPI_OCR).tobytes("png"), idioma)
+
     n_paginas = doc.page_count
     doc.close()
- 
-    texto = normalizar("\n\n".join(p for p in paginas if p.strip()))
+
+    # Limpieza de cabeceras/pies (Fase 2) sobre TODAS las páginas con bloques
+    # posicionados. Las páginas de `sin_capa` casi no aportan bloques (por
+    # definición, menos de MIN_PALABRAS_PAGINA), así que su resultado aquí se
+    # descarta enseguida y se reemplaza por el texto de OCR + `quitar_numeros_sueltos`.
+    paginas_limpias, informe = quitar_repetidos(paginas_bloques)
+
+    piezas: list[str] = []
+    for n in range(n_paginas):
+        if n in texto_ocr:
+            piezas.append(quitar_numeros_sueltos(texto_ocr[n]))
+        else:
+            piezas.append(paginas_limpias[n])
+
+    texto = normalizar("\n\n".join(p for p in piezas if p.strip()))
     if contar_palabras(texto) < MIN_PALABRAS_DOC:
         raise DocumentoSinTexto(
             f"{path.name}: {n_paginas} páginas, {contar_palabras(texto)} palabras extraídas. "
             f"{len(sin_capa)} páginas sin capa de texto. ¿Escaneado con OCR fallido o protegido?"
         )
-    return texto
+    return (texto, informe) if devolver_informe else texto
 
 def titulo_pdf(path: Path) -> str | None:
     """Título de los metadatos, si existe y no es basura del generador."""
@@ -543,27 +581,91 @@ EXTRACTORES: dict[str, Callable[[Path], str]] = {
     "pdf": extraer_pdf,
     "html": extraer_html,
     "csv": extraer_csv,
+    "xlsx": extraer_xlsx,
+    "json": extraer_json,
+    "imagen": extraer_imagen,
+    "pbf": extraer_pbf,
+    "texto_plano": extraer_texto_plano,
 }
- 
+
 TITULADORES: dict[str, Callable[[Path], "str | None"]] = {
     "pdf": titulo_pdf,
     "html": titulo_html,
+    "json": titulo_json,
 }
- 
- 
-def extraer(path: Path | str, formato: str) -> str:
-    """Punto de entrada único. `formato` viene del manifiesto."""
+
+
+# No existe un manifiesto que declare el formato de cada archivo del corpus
+# (la palabra no aparece en la spec, y ningún módulo lo produce): se deduce
+# de la extensión. Cada clave del diccionario es una extensión posible, en
+# minúsculas y sin punto; el valor es la clave canónica de EXTRACTORES.
+# Cubre las 7 categorías que la spec (§1.3) dice que entrega ADL —pdf, html,
+# json, csv, xlsx, imágenes, pbf— más .md/.txt (texto_plano), previsto en la
+# guía de extracción de la spec (§2.1) aunque ADL no lo liste como insumo hoy.
+_EXTENSIONES_FORMATO: dict[str, str] = {
+    "pdf": "pdf",
+    "html": "html",
+    "htm": "html",
+    "csv": "csv",
+    "xlsx": "xlsx",
+    "xls": "xlsx",
+    "json": "json",
+    "png": "imagen",
+    "jpg": "imagen",
+    "jpeg": "imagen",
+    "tif": "imagen",
+    "tiff": "imagen",
+    "pbf": "pbf",
+    "md": "texto_plano",
+    "txt": "texto_plano",
+}
+
+
+def formato_desde_extension(path: Path | str) -> str:
+    """Deduce la clave canónica de `EXTRACTORES` a partir de la extensión.
+
+    Insensible a mayúsculas/minúsculas y al punto inicial (`Path.suffix` ya
+    lo incluye, se recorta). Absorbe las variantes más comunes bajo una sola
+    clave: jpg/jpeg y tif/tiff -> "imagen", xls/xlsx -> "xlsx",
+    htm/html -> "html".
+    """
+    ext = Path(path).suffix.lower().lstrip(".")
+    formato = _EXTENSIONES_FORMATO.get(ext)
+    if formato is None:
+        raise DocumentoSinTexto(
+            f"{Path(path).name}: extensión {ext!r} sin formato asociado. "
+            f"Reconocidas: {sorted(_EXTENSIONES_FORMATO)}"
+        )
+    return formato
+
+
+def extraer(path: Path | str, formato: str | None = None) -> str:
+    """Punto de entrada único.
+
+    `formato` es opcional: si no se pasa, se deduce de la extensión de
+    `path` con `formato_desde_extension` (no depender de un manifiesto que
+    no existe). Si se pasa explícitamente, se usa tal cual, sin volver a
+    mirar la extensión.
+    """
     path = Path(path)
+    if formato is None:
+        formato = formato_desde_extension(path)
     extractor = EXTRACTORES.get(formato)
     if extractor is None:
         raise DocumentoSinTexto(
             f"{path.name}: formato {formato!r} sin extractor. Disponibles: {sorted(EXTRACTORES)}"
         )
     return extractor(path)
- 
- 
-def titulo(path: Path | str, formato: str) -> str | None:
-    """Título del documento si el formato lo expone. Alimenta `texto_embed`."""
+
+
+def titulo(path: Path | str, formato: str | None = None) -> str | None:
+    """Título del documento si el formato lo expone. Alimenta `texto_embed`.
+
+    `formato` opcional, misma deducción por extensión que `extraer`.
+    """
+    path = Path(path)
+    if formato is None:
+        formato = formato_desde_extension(path)
     titulador = TITULADORES.get(formato)
-    return titulador(Path(path)) if titulador else None
+    return titulador(path) if titulador else None
  

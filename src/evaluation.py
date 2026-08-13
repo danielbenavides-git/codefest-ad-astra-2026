@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
-from chunking import LIMITE_DURO, contar_palabras
+from src.chunking import LIMITE_DURO, contar_palabras
 
 N_CONSULTAS = 50
 N_DOCUMENTOS = 3
