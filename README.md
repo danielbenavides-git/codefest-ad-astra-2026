@@ -41,20 +41,18 @@ El corpus cubre tres fenómenos—inteligencia artificial en el sector defensa, 
 ├── requirements.txt
 ├── pyproject.toml
 ├── src/
-│   ├── config.py           ← parámetros compartidos (encoder, dimensión, normalización)
-│   ├── extraction.py       ← Fase 1
-│   ├── cleaning.py         ← Fase 2
-│   ├── chunking.py         ← Fase 3
-│   ├── encoding.py         ← Fase 4
-│   ├── indexing.py         ← Fase 5
-│   ├── retrieval.py        ← Fase 6
-│   ├── fusion.py           ← combina rankings de varios encoders (§8.4)
-│   ├── aggregation.py      ← agrega fragmentos al nivel de documento (§8.6)
-│   ├── output.py           ← traduce los nombres internos (español) a los de
-│   │                          resultados.jsonl (inglés, Tabla 2 §9.3.2); único
-│   │                          sitio donde ocurre esa traducción
-│   ├── evaluation.py       ← Fase 7
-│   └── knowledge_graph.py  ← Fase bonus, grafo de conocimiento
+│   ├── config.py
+│   ├── extraction.py
+│   ├── cleaning.py
+│   ├── chunking.py
+│   ├── encoding.py
+│   ├── indexing.py
+│   ├── retrieval.py
+│   ├── fusion.py
+│   ├── aggregation.py
+│   ├── output.py
+│   ├── evaluation.py
+│   └── knowledge_graph.py
 ├── scripts/
 ├── data/
 │   ├── raw/
