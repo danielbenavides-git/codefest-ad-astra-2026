@@ -20,7 +20,7 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 
-from src.chunking import LIMITE_DURO, contar_palabras
+from src.chunking import LIMITE_DURO, contar_palabras, expandir
 
 N_CONSULTAS = 50
 N_DOCUMENTOS = 3
@@ -63,17 +63,29 @@ def armar_documentos(documentos: Sequence[dict]) -> list[dict]:
     return salida
 
 
-def armar_fragmentos(fragmentos: Sequence[dict]) -> list[dict]:
+def armar_fragmentos(
+    fragmentos: Sequence[dict],
+    metadata: Sequence[dict] | None = None,
+) -> list[dict]:
     """Salida de `retrieval.buscar_vector` -> array `fragments`.
 
     Recibe los fragmentos ya ordenados y ya recortados a los 10 primeros.
-    Este módulo no ordena ni recorta la lista: solo traduce y verifica.
+    Este módulo no ordena ni recorta la lista: solo traduce, expande y verifica.
+
+    Si se pasa `metadata` (las líneas de metadata.jsonl, en el orden del
+    índice), cada fragmento se expande con el texto de sus vecinos del mismo
+    documento hasta el presupuesto de salida. §9.2.1 lo permite explícitamente
+    y §10.2.1 dice que la relevancia se juzga sobre el `text` entregado, así
+    que entregar el chunk crudo de ~140 palabras desperdicia el 40% del
+    presupuesto de evidencia y baja el NDCG sin ninguna contrapartida.
     """
     if len(fragmentos) != N_FRAGMENTOS:
         raise ValueError(
             f"Se recibieron {len(fragmentos)} fragmentos y la entrega exige "
             f"exactamente {N_FRAGMENTOS} (§9.3.2)."
         )
+
+    vecinos = _indexar_vecinos(metadata) if metadata else {}
 
     salida = []
     for posicion, fragmento in enumerate(fragmentos, start=1):
@@ -91,6 +103,9 @@ def armar_fragmentos(fragmentos: Sequence[dict]) -> list[dict]:
                 f"campo 'texto'. Viene de metadata.jsonl, donde el campo se "
                 f"llama así; acá se traduce a 'text'."
             )
+
+        if vecinos:
+            texto = _expandir_fragmento(fragmento, vecinos)
 
         palabras = contar_palabras(texto)
         if palabras > LIMITE_DURO:
@@ -113,16 +128,55 @@ def armar_fragmentos(fragmentos: Sequence[dict]) -> list[dict]:
     return salida
 
 
+def _indexar_vecinos(metadata: Sequence[dict]) -> dict[str, dict[int, str]]:
+    """{doc_id: {posicion: texto}} para poder buscar los vecinos por posición."""
+    porc: dict[str, dict[int, str]] = {}
+    for registro in metadata:
+        doc_id = registro.get("doc_id")
+        posicion = registro.get("posicion")
+        if doc_id is None or posicion is None:
+            continue
+        porc.setdefault(doc_id, {})[int(posicion)] = registro.get("texto", "")
+    return porc
+
+
+def _expandir_fragmento(fragmento: dict, vecinos: dict[str, dict[int, str]]) -> str:
+    """Crece el texto con `posicion` ± 1 del MISMO documento (§9.2.1).
+
+    Solo los inmediatos: la spec permite concatenar con el fragmento
+    anterior o posterior, no con cualquiera del documento.
+    """
+    del_doc = vecinos.get(fragmento.get("doc_id"), {})
+    posicion = fragmento.get("posicion")
+    if posicion is None or not del_doc:
+        return fragmento["texto"]
+
+    posicion = int(posicion)
+    return expandir(
+        fragmento["texto"],
+        antes=del_doc.get(posicion - 1, ""),
+        despues=del_doc.get(posicion + 1, ""),
+        idioma=fragmento.get("idioma"),
+    )
+
+
 def armar_linea(
     query_id: str,
     documentos: Sequence[dict],
     fragmentos: Sequence[dict],
+    metadata: Sequence[dict] | None = None,
 ) -> dict:
-    """Una consulta -> el objeto JSON de una línea de `resultados.jsonl`."""
+    """Una consulta -> el objeto JSON de una línea de `resultados.jsonl`.
+
+    `metadata` habilita la expansión de los fragmentos con sus vecinos. Es
+    opcional para no romper los tests existentes, pero `generador.py` debe
+    pasarla siempre: sin ella se entregan chunks crudos de ~140 palabras
+    cuando el límite es 250.
+    """
     return {
         "query_id": _validar_query_id(query_id),
         "documents": armar_documentos(documentos),
-        "fragments": armar_fragmentos(fragmentos),
+        "fragments": armar_fragmentos(fragmentos, metadata),
     }
 
 
