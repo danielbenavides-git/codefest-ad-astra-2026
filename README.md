@@ -71,3 +71,7 @@ funcione igual desde notebooks, tests, scripts o cualquier directorio de trabajo
 pip install -r requirements.txt
 pip install -e .
 ```
+
+## License Apache 2.0
+
+License: The source code developed by Talon Systems for this project is licensed under the Apache License 2.0. Third-party dependencies, models, and datasets remain subject to their respective licenses and terms of use.
