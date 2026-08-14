@@ -214,6 +214,8 @@ def main(argv=None, modelo=None) -> int:
                         help="Procesa solo los primeros N archivos (para probar).")
     parser.add_argument("--reusar-vectores", action="store_true",
                         help="Carga los embeddings guardados en vez de codificar.")
+    parser.add_argument("--grafo", action="store_true",
+                        help="Construye también grafo/grafo.graphml (bonus, §8.5).")
     args = parser.parse_args(argv)
 
     salida = args.salida or carpeta_de_salida()
@@ -257,6 +259,17 @@ def main(argv=None, modelo=None) -> int:
     print("5.   Construyendo el índice FAISS...")
     index = construir_indice(embeddings, chunks)
     guardar_base(index, chunks, salida)
+
+    if args.grafo:
+        print("bonus. Construyendo el grafo de conocimiento...")
+        try:
+            from src.knowledge_graph import construir_desde_chunks
+
+            construir_desde_chunks(chunks, salida)
+        except Exception as exc:  # noqa: BLE001
+            # El grafo es opcional: un fallo acá no puede tumbar la base
+            # vectorial, que sí es obligatoria.
+            print(f"     grafo omitido ({type(exc).__name__}: {exc})", file=sys.stderr)
 
     minutos = (time.perf_counter() - inicio) / 60
     print()
