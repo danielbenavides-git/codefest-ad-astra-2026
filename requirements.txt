@@ -26,6 +26,9 @@ pillow==12.3.0            # imagenes
 pytesseract==0.3.13       # OCR de paginas PDF escaneadas
 easyocr==1.7.2            # OCR de imagenes sueltas
 
+# --- Grafo de conocimiento (bonus, §8.5) ---
+networkx==3.6.1             # construccion y export a GraphML
+
 # --- Desarrollo ---
 pytest==9.1.1
 jupyter==1.1.1
