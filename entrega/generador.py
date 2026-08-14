@@ -29,6 +29,11 @@ from pathlib import Path
 # los dos para que la entrega funcione por sí sola en la máquina del jurado.
 AQUI = Path(__file__).resolve().parent
 RAIZ = AQUI if (AQUI / "src").is_dir() else AQUI.parent
+
+# Los entregables (resultados, base vectorial) viven siempre junto a este
+# archivo, se llame la carpeta `entrega/` o como la renombre el jurado. Usar
+# RAIZ acá daría `entrega/entrega/` cuando la entrega va empaquetada.
+DIR_ENTREGA = AQUI
 if str(RAIZ) not in sys.path:
     sys.path.insert(0, str(RAIZ))
 
@@ -158,7 +163,7 @@ def main(argv=None, modelo=None) -> int:
                              "scripts/empaquetar.py para verificar la entrega.")
     parser.add_argument("--base", type=Path, default=None,
                         help="Por defecto entrega/base_vectorial/encoder_<nombre>/")
-    parser.add_argument("--salida", type=Path, default=RAIZ / "entrega" / "resultados.jsonl")
+    parser.add_argument("--salida", type=Path, default=DIR_ENTREGA / "resultados.jsonl")
     parser.add_argument("--k", type=int, default=K_POR_DEFECTO)
     parser.add_argument("--estrategia", choices=ESTRATEGIAS, default=ESTRATEGIA_POR_DEFECTO)
     args = parser.parse_args(argv)
@@ -171,7 +176,7 @@ def main(argv=None, modelo=None) -> int:
         parser.error("hace falta --consultas (o --ayuda-imports)")
 
     base = args.base or (
-        RAIZ / "entrega" / "base_vectorial" / f"encoder_{config.ENCODER.split('/')[-1]}"
+        DIR_ENTREGA / "base_vectorial" / f"encoder_{config.ENCODER.split('/')[-1]}"
     )
     inicio = time.perf_counter()
 
